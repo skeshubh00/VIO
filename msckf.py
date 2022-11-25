@@ -237,16 +237,33 @@ class MSCKF(object):
         """
         # Initialize the gyro_bias given the current angular and linear velocity
         ...
+        initial_gyro_bias = np.zeros(3)
+        initial_acceleration = np.zeros(3)
+        for i in range(len(self.imu_msg_buffer)):
+            initial_gyro_bias += self.imu_msg_buffer[i].angular_velocity
+            initial_acceleration += self.imu_msg_buffer[i].linear_acceleration
+        initial_gyro_bias = initial_gyro_bias/len(self.imu_msg_buffer)
+        initial_gyro_bias = np.asarray(initial_gyro_bias)
+        #print('initial gyro bias',initial_gyro_bias.shape, initial_gyro_bias)
+        self.state_server.imu_state.gyro_bias = initial_gyro_bias.ravel()
         
         # Find the gravity in the IMU frame.
         ...
+        initial_acceleration = initial_acceleration/len(self.imu_msg_buffer)
+        initial_acceleration = np.asarray(initial_acceleration)
+        initial_acceleration_norm = np.linalg.norm(initial_acceleration)
+        self.state_server.imu_state.acc_bias = initial_acceleration.ravel()
         
         # Normalize the gravity and save to IMUState          
         ...
-        
+        gravity = [0,0,-initial_acceleration_norm]
         # Initialize the initial orientation, so that the estimation
         # is consistent with the inertial frame.
         ...
+        quat_i_w = from_two_vectors(initial_acceleration, -gravity)
+        quat_w_i = to_quaternion(np.transpose(to_rotation(quat_i_w)))
+        self.state_server.imu_state.orientation = quat_w_i
+        
 
     # Filter related functions
     # (batch_imu_processing, process_model, predict_new_state)
