@@ -398,7 +398,7 @@ class MSCKF(object):
         # k4 = f(tn+dt, yn+k3*dt)
         ...
         k3_v = velocity_current + k3_v_dot*dt
-        k4_v_dot = np.dot(dr_dt_transpose, acc) + IMUState().gravity
+        k4_v_dot = np.dot(dr_dt_transpose, acc) + IMUState.gravity
         k4_p_dot = k3_v
         
         orientation_current = dq_dt
