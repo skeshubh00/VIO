@@ -257,6 +257,7 @@ class MSCKF(object):
         # Normalize the gravity and save to IMUState          
         ...
         gravity = [0,0,-initial_acceleration_norm]
+        IMUState.gravity = [0,0,-initial_acceleration_norm]
         # Initialize the initial orientation, so that the estimation
         # is consistent with the inertial frame.
         ...
@@ -346,35 +347,73 @@ class MSCKF(object):
         """Propogate the state using 4th order Runge-Kutta for equstion (1) in "MSCKF" paper"""
         # compute norm of gyro
         ...
-        
+        gyro = np.asarray(gyro)
+        gyro_norm = np.linalg.norm(gyro)        
         # Get the Omega matrix, the equation above equation (2) in "MSCKF" paper
         ...
-        
+        wx = skew(gyro)
+        omega = np.zeros([4,4])
+        omega[0:3,0:3] = -wx
+        omega[0:3,3] = gyro
+        omega[3,0:3] = -gyro
         # Get the orientation, velocity, position
         ...
-        
+        orientation_current = self.state_server.imu_state.orientation
+        velocity_current = self.state_server.imu_state.velocity
+        position_current = self.state_server.imu_state.position
         # Compute the dq_dt, dq_dt2 in equation (1) in "MSCKF" paper
         ...
-        
+        if(gyro_norm < 1e-05):
+            dq_dt = np.dot((math.cos(0.5*dt*gyro_norm)*np.identity(4) + 1/gyro_norm * math.sin(0.5*dt*gyro_norm)*omega),orientation_current)
+            dq_dt2 = np.dot((math.cos(0.25*dt*gyro_norm)*np.identity(4) + 1/gyro_norm * math.sin(0.25*dt*gyro_norm)*omega),orientation_current)
+        else:
+            dq_dt = np.dot((math.cos(gyro_norm*0.5*dt)*(np.identity(4) + 0.5*dt*omega)),orientation_current)
+            dq_dt2 = np.dot((math.cos(gyro_norm*0.25*dt)*(np.identity(4) + 0.25*dt*omega)),orientation_current)
+            
+        dr_dt = to_rotation(dq_dt)
+        dr_dt2 = to_rotation(dq_dt2)
+
+        dr_dt_transpose = np.transpose(dr_dt)
+        dr_dt2_transpose = np.transpose(dr_dt2)
+
         # Apply 4th order Runge-Kutta 
+        
         # k1 = f(tn, yn)
         ...
-
+        k1_v_dot = np.dot(np.transpose(to_rotation(orientation_current)), acc) + IMUState.gravity
+        k1_p_dot = velocity_current
+        
         # k2 = f(tn+dt/2, yn+k1*dt/2)
         ...
+        k1_v = velocity_current + k1_v_dot*dt/2
+        k2_v_dot = np.dot(dr_dt2_transpose, acc) + IMUState.gravity
+        k2_p_dot = k1_v
         
         # k3 = f(tn+dt/2, yn+k2*dt/2)
         ...
+        k2_v = velocity_current + k2_v_dot*dt/2
+        k3_v_dot = np.dot(dr_dt2_transpose, acc) + IMUState.gravity
+        k3_p_dot = k2_v
         
         # k4 = f(tn+dt, yn+k3*dt)
         ...
-
+        k3_v = velocity_current + k3_v_dot*dt
+        k4_v_dot = np.dot(dr_dt_transpose, acc) + IMUState.gravity
+        k4_p_dot = k3_v
+        
+        orientation_current = dq_dt
+        orientation_current = quaternion_normalize(orientation_current)
         # yn+1 = yn + dt/6*(k1+2*k2+2*k3+k4)
         ...
+        velocity_current = velocity_current + dt/6*(k1_v_dot + 2*k2_v_dot + 2*k3_v_dot + k4_v_dot)
+        position_current = position_current + dt/6*(k1_p_dot + 2*k2_p_dot + 2*k3_p_dot + k4_p_dot)
 
         # update the imu state
         ...
-
+        self.state_server.imu_state.orientation = orientation_current
+        self.state_server.imu_state.velocity = velocity_current
+        self.state_server.imu_state.position = position_current
+        """
     
     def state_augmentation(self, time):
         """
